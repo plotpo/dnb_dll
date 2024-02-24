@@ -6,13 +6,10 @@ import pandas as pd
 import csv
 
 
-#Die Funktion dnb_sru nimmt den Paramter "query" der SRU-Abfrage 
+#Die Funktion dnb_sru nimmt den Parameter "query" der SRU-Abfrage 
 #entgegen und liefert alle Ergebnisse als eine Liste von Records 
-#aus. Bei mehr als 100 Records werden weitere DatensÃ¤tze mit 
+#aus. Bei mehr als 100 Records werden weitere Datensätze mit 
 #"&startRecord=101" abgerufen (mögliche Werte 1 bis 99.000). 
-#Weitere Informationen und Funktionen der SRU- Schnittstelle 
-#werden unter https://www.dnb.de/sru beschrieben.
-
 def dnb_sru(query):
     
     base_url = "https://services.dnb.de/sru/dnb"
@@ -48,88 +45,69 @@ def dnb_sru(query):
     
 
 #Die Funktion parse_records nimmt als Parameter jeweils ein 
-#Record entgegen und sucht Ã¼ber xpath die gewÃ¼nschte 
-#Informationen heraus und liefert diese als Dictionary zurÃ¼ck. 
-#Die SchlÃ¼ssel-Werte-Paare kÃ¶nnen beliebig agepasst und 
-#erweitert werden. In diesem Fall werden Elemente fÃ¼r IDN und 
-#Titel geliefert.
+#Record entgegen und sucht über xpath die gewünschte 
+#Informationen heraus und liefert diese als Dictionary zurück. 
 def parse_record(record):
     
     ns = {"marc":"http://www.loc.gov/MARC21/slim"}
     xml = etree.fromstring(unicodedata.normalize("NFC", str(record)))
     
-    # year
+    #year
     year = xml.xpath("marc:datafield[@tag = '264']/marc:subfield[@code = 'c']", namespaces=ns)
-    
     try:
         year = year[0].text
-        #year = unicodedata.normalize("NFC", titel)
     except:
-        year = "unkown"
+        year = "unknown"
         
-    # author
+    #author
     author = xml.xpath("marc:datafield[@tag = '100']/marc:subfield[@code = 'a']", namespaces=ns)
-    
     try:
         author = author[0].text
-        #author = unicodedata.normalize("NFC", titel)
     except:
-        author = "unkown"
+        author = "unknown"
     
-   # titel
+    #titel
     titel = xml.xpath("marc:datafield[@tag = '245']/marc:subfield[@code = 'a']", namespaces=ns)
-    
     try:
         titel = titel[0].text
-        #titel = unicodedata.normalize("NFC", titel)
     except:
-        titel = "unkown"
+        titel = "unknown"
         
-    # subtitle
+    #subtitle
     subtitle = xml.xpath("marc:datafield[@tag = '245']/marc:subfield[@code = 'b']", namespaces=ns)
-    
     try:
         subtitle = subtitle[0].text
-        #subtitle = unicodedata.normalize("NFC", titel)
     except:
-        subtitle = "unkown"          
+        subtitle = "unknown"          
 
-    # subtitle2
+    #subtitle2
     subtitle2 = xml.xpath("marc:datafield[@tag = '245']/marc:subfield[@code = 'c']", namespaces=ns)
-    
     try:
         subtitle2 = subtitle2[0].text
-        #subtitle2 = unicodedata.normalize("NFC", titel)
     except:
-        subtitle2 = "unkown"    
+        subtitle2 = "unknown"    
         
-    # genre ???
+    #genre ???
     genre = xml.xpath("marc:datafield[@tag = '655']/marc:subfield[@code = 'a']", namespaces=ns)
-    
     try:
         genre = genre[0].text
-        #genre = unicodedata.normalize("NFC", titel)
     except:
-        genre = "unkown"     
+        genre = "unknown"     
 
     #description
     description = xml.xpath("marc:datafield[@tag = '856']/marc:subfield[@code = 'u']", namespaces=ns)
-    
     try:
         description = description[0].text
-        #description = unicodedata.normalize("NFC", titel)
     except:
-        description = "unkown"      
+        description = "unknown"      
     
     #publisher
     publisher = xml.xpath("marc:datafield[@tag = '264']/marc:subfield[@code = 'b']", namespaces=ns)
-    
     try:
         publisher = publisher[0].text
-        #publisher = unicodedata.normalize("NFC", titel)
     except:
-        publisher = "unkown"   
-        
+        publisher = "unknown"   
+
     meta_dict = {"year":year, 
                  "author":author,
                  "titel":titel,
@@ -141,42 +119,31 @@ def parse_record(record):
     
     return meta_dict
 
-#this function imports the list of names
+#diese funktion importiert eine liste von namen aus einer .csv-datei
+#im gleichen ordner und gibt sie als list aus
+#format: vorname nachname,
 def import_persons():
     file = open("persons_list.csv", "r", encoding="utf-8")
     persons = list(csv.reader(file, delimiter=","))
     file.close()
-    print(persons)
     return persons
 
 
-#Ãœber die verschiedenen Indices 
+#Über die verschiedenen Indices 
 #https://services.dnb.de/sru/dnb?operation=explain&version=1.1 
-#kann die SRU-Abfrage mittels CQL gezielt z.B. Ã¼ber das 
-#Titelstichwort "Klimawandel" in Kombination mit dem Standort 
-#"online frei verfÃ¼gbar" eingeschrÃ¤nkt werden. Auf diese Art 
-#kann durch Anpassen des Codes nach verschiedenen Begriffen in 
-#beliebigen MARC-Feldern gesucht werden. 
-
-
+#kann die SRU-Abfrage mittels CQL gezielt eingeschrÃ¤nkt werden. 
 persons = import_persons()
 
-df = pd.DataFrame()  # Create an empty DataFrame to store the results
+#Leerer DataFrame wird vor Loop initiiert
+df = pd.DataFrame()  
 
+#Loopt durch die Namensliste und sucht jeweils gezielt nach Person,
+#dann werden die Ergebnisse dem Dataframe hinzugefügt
 for person in persons:
     records = dnb_sru('per=' + str(person))
     print(len(records), 'Ergebnisse')
     output = [parse_record(record) for record in records]
     df = df.append(output, ignore_index=True)
 
-    
-#df
-
-# vor- und nachnamen trennen!
-# subtitles handlen ???
-# genre aus subtitle ableiten?
-# desc. - text aus link nehmen
-
-
-print(df)
-df.to_csv("SRU_Titel.csv", index=False)
+#Dataframe wird als .csv im gleichen Ordner gespeichert
+df.to_csv("SRU_Output.csv", index=False)
