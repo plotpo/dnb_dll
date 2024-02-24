@@ -68,7 +68,7 @@ def parse_record(record):
         titel = "unknown"
            
     #GND-Nummer
-    GND = xml.xpath("marc:datafield[@tag = ' ']/marc:subfield[@code = ' ']", namespaces=ns)
+    GND = xml.xpath("marc:datafield[@tag = '035']/marc:subfield[@code = 'a']", namespaces=ns)
     try:
         GND = GND[0].text
     except:
