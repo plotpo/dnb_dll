@@ -1,0 +1,182 @@
+import requests
+from bs4 import BeautifulSoup as soup
+import unicodedata
+from lxml import etree
+import pandas as pd
+import csv
+
+
+#Die Funktion dnb_sru nimmt den Paramter "query" der SRU-Abfrage 
+#entgegen und liefert alle Ergebnisse als eine Liste von Records 
+#aus. Bei mehr als 100 Records werden weitere DatensÃ¤tze mit 
+#"&startRecord=101" abgerufen (mögliche Werte 1 bis 99.000). 
+#Weitere Informationen und Funktionen der SRU- Schnittstelle 
+#werden unter https://www.dnb.de/sru beschrieben.
+
+def dnb_sru(query):
+    
+    base_url = "https://services.dnb.de/sru/dnb"
+    params = {'recordSchema' : 'MARC21-xml',
+          'operation': 'searchRetrieve',
+          'version': '1.1',
+          'maximumRecords': '100',
+          'query': query
+         }
+    r = requests.get(base_url, params=params)
+    xml = soup(r.content)
+    records = xml.find_all('record', {'type':'Bibliographic'})
+    
+    if len(records) < 100:
+        
+        return records
+    
+    else:
+        
+        num_results = 100
+        i = 101
+        while num_results == 100:
+            
+            params.update({'startRecord': i})
+            r = requests.get(base_url, params=params)
+            xml = soup(r.content)
+            new_records = xml.find_all('record', {'type':'Bibliographic'})
+            records+=new_records
+            i+=100
+            num_results = len(new_records)
+            
+        return records
+    
+
+#Die Funktion parse_records nimmt als Parameter jeweils ein 
+#Record entgegen und sucht Ã¼ber xpath die gewÃ¼nschte 
+#Informationen heraus und liefert diese als Dictionary zurÃ¼ck. 
+#Die SchlÃ¼ssel-Werte-Paare kÃ¶nnen beliebig agepasst und 
+#erweitert werden. In diesem Fall werden Elemente fÃ¼r IDN und 
+#Titel geliefert.
+def parse_record(record):
+    
+    ns = {"marc":"http://www.loc.gov/MARC21/slim"}
+    xml = etree.fromstring(unicodedata.normalize("NFC", str(record)))
+    
+    # year
+    year = xml.xpath("marc:datafield[@tag = '264']/marc:subfield[@code = 'c']", namespaces=ns)
+    
+    try:
+        year = year[0].text
+        #year = unicodedata.normalize("NFC", titel)
+    except:
+        year = "unkown"
+        
+    # author
+    author = xml.xpath("marc:datafield[@tag = '100']/marc:subfield[@code = 'a']", namespaces=ns)
+    
+    try:
+        author = author[0].text
+        #author = unicodedata.normalize("NFC", titel)
+    except:
+        author = "unkown"
+    
+   # titel
+    titel = xml.xpath("marc:datafield[@tag = '245']/marc:subfield[@code = 'a']", namespaces=ns)
+    
+    try:
+        titel = titel[0].text
+        #titel = unicodedata.normalize("NFC", titel)
+    except:
+        titel = "unkown"
+        
+    # subtitle
+    subtitle = xml.xpath("marc:datafield[@tag = '245']/marc:subfield[@code = 'b']", namespaces=ns)
+    
+    try:
+        subtitle = subtitle[0].text
+        #subtitle = unicodedata.normalize("NFC", titel)
+    except:
+        subtitle = "unkown"          
+
+    # subtitle2
+    subtitle2 = xml.xpath("marc:datafield[@tag = '245']/marc:subfield[@code = 'c']", namespaces=ns)
+    
+    try:
+        subtitle2 = subtitle2[0].text
+        #subtitle2 = unicodedata.normalize("NFC", titel)
+    except:
+        subtitle2 = "unkown"    
+        
+    # genre ???
+    genre = xml.xpath("marc:datafield[@tag = '655']/marc:subfield[@code = 'a']", namespaces=ns)
+    
+    try:
+        genre = genre[0].text
+        #genre = unicodedata.normalize("NFC", titel)
+    except:
+        genre = "unkown"     
+
+    #description
+    description = xml.xpath("marc:datafield[@tag = '856']/marc:subfield[@code = 'u']", namespaces=ns)
+    
+    try:
+        description = description[0].text
+        #description = unicodedata.normalize("NFC", titel)
+    except:
+        description = "unkown"      
+    
+    #publisher
+    publisher = xml.xpath("marc:datafield[@tag = '264']/marc:subfield[@code = 'b']", namespaces=ns)
+    
+    try:
+        publisher = publisher[0].text
+        #publisher = unicodedata.normalize("NFC", titel)
+    except:
+        publisher = "unkown"   
+        
+    meta_dict = {"year":year, 
+                 "author":author,
+                 "titel":titel,
+                 "subtitle":subtitle,
+                 "subtitle2":subtitle2,
+                 "genre":genre,
+                 "description":description,
+                 "publisher":publisher}
+    
+    return meta_dict
+
+#this function imports the list of names
+def import_persons():
+    file = open("persons_list.csv", "r", encoding="utf-8")
+    persons = list(csv.reader(file, delimiter=","))
+    file.close()
+    print(persons)
+    return persons
+
+
+#Ãœber die verschiedenen Indices 
+#https://services.dnb.de/sru/dnb?operation=explain&version=1.1 
+#kann die SRU-Abfrage mittels CQL gezielt z.B. Ã¼ber das 
+#Titelstichwort "Klimawandel" in Kombination mit dem Standort 
+#"online frei verfÃ¼gbar" eingeschrÃ¤nkt werden. Auf diese Art 
+#kann durch Anpassen des Codes nach verschiedenen Begriffen in 
+#beliebigen MARC-Feldern gesucht werden. 
+
+
+persons = import_persons()
+
+df = pd.DataFrame()  # Create an empty DataFrame to store the results
+
+for person in persons:
+    records = dnb_sru('per=' + str(person))
+    print(len(records), 'Ergebnisse')
+    output = [parse_record(record) for record in records]
+    df = df.append(output, ignore_index=True)
+
+    
+#df
+
+# vor- und nachnamen trennen!
+# subtitles handlen ???
+# genre aus subtitle ableiten?
+# desc. - text aus link nehmen
+
+
+print(df)
+df.to_csv("SRU_Titel.csv", index=False)
